@@ -7,6 +7,15 @@ library(lubridate)
 
 #bring in the data
 bikedata <- vroom("/Users/nicholasthomas/Desktop/STATISTICS/STAT 348/BikeShare/bike-sharing-demand/train.csv")
+testdata <- vroom("/Users/nicholasthomas/Desktop/STATISTICS/STAT 348/BikeShare/bike-sharing-demand/test.csv")
+
+# Dump casual and registered
+bikedata <- bikedata |>
+  select(-casual, -registered)
+
+
+head(testdata)
+head(bikedata)
 
 #make some variables factors
 bikedata <- bikedata |>
@@ -31,6 +40,7 @@ bikedata <- bikedata |>
 head(bikedata)
 View(bikedata)
 
+
 # Do some EDA
 dplyr::glimpse(bikedata)
 DataExplorer::plot_intro(bikedata)
@@ -39,10 +49,10 @@ DataExplorer::plot_histogram(bikedata)
 DataExplorer::plot_missing(bikedata)
 
 # Let's make some new variables & tables
-bikedata <- bikedata |>
+newbikedata <- bikedata |>
   mutate(hour = lubridate::hour(datetime))
 
-data_by_hour <- bikedata |>
+data_by_hour <- newbikedata |>
   group_by(hour) |>
   summarise(mean_count = mean(count))
 
@@ -53,6 +63,7 @@ avg_weather <- bikedata |>
   
 head(data_by_hour)
 head(avg_weather)
+View(avg_weather)
 View(data_by_hour)
 
 # Make and save plots to the panels
@@ -98,3 +109,51 @@ p4 <- ggplot(data = avg_weather, aes(x = weather, y = mean_count, fill = weather
 
 # Make the plots
 (p1 + p2) / (p3 + p4)
+
+
+
+
+
+# Lets do a Linear Regression!
+library(tidymodels)
+
+testdata <- testdata |>
+  mutate(weather = factor(weather,
+                          levels = 1:4,
+                          labels = c("Clear",
+                                     "Mist/Cloudy",
+                                     "Light Rain/Snow",
+                                     "Heavy Rain/Snow")))
+
+
+testdata <- testdata |>
+  mutate(season = factor(season,
+                         levels = 1:4,
+                         labels = c("Spring",
+                                    "Summer",
+                                    "Fall",
+                                    "Winter")))
+
+
+bikedata
+
+my_linear_model <- linear_reg() |>
+  set_engine("lm") |>
+  set_mode("regression") |>
+  fit(formula = count ~ ., data = bikedata)
+
+bike_predictions <- predict(my_linear_model,
+                            new_data = testdata)
+bike_predictions
+
+
+
+# Let's submit
+kaggle_submission <- bind_cols(bike_predictions, testdata) |>
+  select(datetime, .pred) |>
+  rename(count = .pred) |>
+  mutate(count = pmax(0, count),
+         datetime = as.character(format(datetime)))
+
+vroom_write(x=kaggle_submission, file="./LinearPreds.csv", delim=",")
+
