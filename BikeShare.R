@@ -9,15 +9,35 @@ library(lubridate)
 bikedata <- vroom("/Users/nicholasthomas/Desktop/STATISTICS/STAT 348/BikeShare/bike-sharing-demand/train.csv")
 testdata <- vroom("/Users/nicholasthomas/Desktop/STATISTICS/STAT 348/BikeShare/bike-sharing-demand/test.csv")
 
+
+#DATA WRANGLING HOMEWORK SECTION
 # Dump casual and registered
 bikedata <- bikedata |>
   select(-casual, -registered)
 
+# Change count to log(count)
+bikedata <- bikedata |>
+  mutate(count = log(count))
 
-head(testdata)
+view(bikedata)
+
+# Recipe to recode weather, extract hour, make season factor...
+my_recipe <- recipe(count ~., data = bikedata) |>
+  step_mutate(weather = if_else(weather == 4, 3, weather)) |>
+  step_mutate(weather = factor(weather)) |>
+  step_time(datetime, features = "hour") |>
+  step_mutate(season = factor(season)) |>
+  step_corr(all_numeric_predictors(), threshold = 0.5) |>
+  step_dummy(all_nominal_predictors()) |>
+  step_normalize(all_numeric_predictors())
+prepped_recipe <- prep(my_recipe)
+bake(prepped_recipe, new_data = bikedata)
+
+
+# Print out baked dataset
 head(bikedata)
 
-#make some variables factors
+# Make some variables factors
 bikedata <- bikedata |>
   mutate(weather = factor(weather,
                           levels = 1:4,
@@ -34,11 +54,6 @@ bikedata <- bikedata |>
                                     "Summer",
                                     "Fall",
                                     "Winter")))
-
-
-# Just look at the data
-head(bikedata)
-View(bikedata)
 
 
 # Do some EDA
@@ -143,9 +158,8 @@ my_linear_model <- linear_reg() |>
   fit(formula = count ~ ., data = bikedata)
 
 bike_predictions <- predict(my_linear_model,
-                            new_data = testdata)
-bike_predictions
-
+                            new_data = testdata) |>
+  mutate(.pred = exp(.pred))
 
 
 # Let's submit
