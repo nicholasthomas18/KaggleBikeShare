@@ -129,7 +129,7 @@ p4 <- ggplot(data = avg_weather, aes(x = weather, y = mean_count, fill = weather
 
 
 
-# Lets do a Linear Regression!
+# Lets do a Penalized Linear Regression!
 library(tidymodels)
 
 testdata <- testdata |>
@@ -152,14 +152,59 @@ testdata <- testdata |>
 
 bikedata
 
-my_linear_model <- linear_reg() |>
-  set_engine("lm") |>
+
+# No penalty
+pregmodel_1 <- linear_reg(penalty = 0, mixture = 0) |>
+  set_engine("glmnet") |>
   set_mode("regression") |>
   fit(formula = count ~ ., data = bikedata)
 
-bike_predictions <- predict(my_linear_model,
+bike_predictions <- predict(pregmodel_1,
                             new_data = testdata) |>
   mutate(.pred = exp(.pred))
+
+# LASSO
+pregmodel_2 <- linear_reg(penalty = 1, mixture = 1) |>
+  set_engine("glmnet") |>
+  set_mode("regression") |>
+  fit(formula = count ~ ., data = bikedata)
+
+bike_predictions <- predict(pregmodel_2,
+                            new_data = testdata) |>
+  mutate(.pred = exp(.pred))
+
+
+# RIDGE
+pregmodel_3 <- linear_reg(penalty = 1, mixture = 0) |>
+  set_engine("glmnet") |>
+  set_mode("regression") |>
+  fit(formula = count ~ ., data = bikedata)
+
+bike_predictions <- predict(pregmodel_3,
+                            new_data = testdata) |>
+  mutate(.pred = exp(.pred))
+
+
+# Elastic Net
+pregmodel_4 <- linear_reg(penalty = 1, mixture = .5) |>
+  set_engine("glmnet") |>
+  set_mode("regression") |>
+  fit(formula = count ~ ., data = bikedata)
+
+bike_predictions <- predict(pregmodel_4,
+                            new_data = testdata) |>
+  mutate(.pred = exp(.pred))
+
+# Small Penalty
+pregmodel_5 <- linear_reg(penalty = 0.1, mixture = .5) |>
+  set_engine("glmnet") |>
+  set_mode("regression") |>
+  fit(formula = count ~ ., data = bikedata)
+
+bike_predictions <- predict(pregmodel_5,
+                            new_data = testdata) |>
+  mutate(.pred = exp(.pred))
+
 
 
 # Let's submit
