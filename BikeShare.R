@@ -25,7 +25,8 @@ view(bikedata)
 my_recipe <- recipe(count ~., data = bikedata) |>
   step_mutate(weather = if_else(weather == 4, 3, weather)) |>
   step_mutate(weather = factor(weather)) |>
-  step_time(datetime, features = "hour") |>
+  step_mutate(datetime_num = as.numeric(datetime)) |>
+  step_rm(datetime) |>
   step_mutate(season = factor(season)) |>
   step_corr(all_numeric_predictors(), threshold = 0.5) |>
   step_dummy(all_nominal_predictors()) |>
@@ -206,6 +207,44 @@ bike_predictions <- predict(pregmodel_5,
   mutate(.pred = exp(.pred))
 
 
+#OK, LETS DO A CROSS VALIDATION!!!
+preg_model <- linear_reg(penalty = tune(),
+                         mixture = tune()) |>
+  set_engine("glmnet")
+
+preg_wf <- workflow() |>
+  add_recipe(my_recipe) |>
+  add_model(preg_model)
+
+
+
+grid_of_tuning_params <- grid_regular(penalty(),
+                                      mixture(),
+                                      levels = 5)
+
+folds <- vfold_cv(bikedata, v = 5, repeats = 1)
+
+CV_results <- preg_wf |>
+  tune_grid(resamples = folds,
+            grid = grid_of_tuning_params,
+            metrics = metric_set(rmse, mae))
+
+collect_metrics(CV_results) |>
+  filter(.metric=="rmse") |>
+  ggplot(aes(x = penalty, y = mean, color = factor(mixture))) +
+  geom_line()
+
+bestTune <- CV_results |>
+  select_best(metric = "rmse")
+
+final_wf <-
+  preg_wf |>
+  finalize_workflow(bestTune) |>
+  fit(data=bikedata)
+
+final_wf |>
+  predict(new_data = testdata)
+
 
 # Let's submit
 kaggle_submission <- bind_cols(bike_predictions, testdata) |>
@@ -214,5 +253,5 @@ kaggle_submission <- bind_cols(bike_predictions, testdata) |>
   mutate(count = pmax(0, count),
          datetime = as.character(format(datetime)))
 
-vroom_write(x=kaggle_submission, file="./LinearPreds.csv", delim=",")
+vroom_write(x=kaggle_submission, file="./LinearPredictions.csv", delim=",")
 
