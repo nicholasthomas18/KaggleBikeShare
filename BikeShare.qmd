@@ -1,3 +1,10 @@
+---
+title: "BikeShare"
+format: html
+editor: visual
+---
+
+```{r}
 # Load in Packages
 library(tidyverse)
 library(tidymodels)
@@ -5,13 +12,16 @@ library(vroom)
 library(patchwork)
 library(lubridate)
 library(ranger)
+```
 
-
+```{r}
 # Bring in Data
 bikedata <- vroom("/Users/nicholasthomas/Desktop/STATISTICS/STAT 348/BikeShare/bike-sharing-demand/train.csv")
 testdata <- vroom("/Users/nicholasthomas/Desktop/STATISTICS/STAT 348/BikeShare/bike-sharing-demand/test.csv")
 
+```
 
+```{r}
 # Data Wrangling
 # Dump casual and registered
 bikedata <- bikedata |>
@@ -21,7 +31,9 @@ bikedata <- bikedata |>
 bikedata <- bikedata |>
   mutate(count = log(count))
 
+```
 
+```{r}
 # Recipe to recode weather, extract hour, make season factor...
 my_recipe <- recipe(count ~., data = bikedata) |>
   step_mutate(weather = if_else(weather == 4, 3, weather)) |>
@@ -33,12 +45,13 @@ my_recipe <- recipe(count ~., data = bikedata) |>
   step_normalize(all_numeric_predictors())
 prepped_recipe <- prep(my_recipe)
 bake(prepped_recipe, new_data = bikedata)
+```
 
-
+```{r}
 # Regression Tree
 my_mod <- rand_forest(mtry = tune(),
-                      min_n = tune(),
-                      trees = 500) |>
+                        min_n = tune(),
+                        trees = 500) |>
   set_engine("ranger") |>
   set_mode("regression")
 
@@ -48,12 +61,13 @@ forest_wf <- workflow() |>
 
 # Create a grid of tuning values
 forest_grid <- grid_regular(mtry(range = c(1, 12)),
-                            min_n(),
-                            levels = 5)
+                                      min_n(),
+                                      levels = 5)
 
 folds <- vfold_cv(bikedata, v = 5, repeats=1)
+```
 
-
+```{r}
 # Run the Cross Validation
 forest_CV_results <- forest_wf |>
   tune_grid(
@@ -61,25 +75,29 @@ forest_CV_results <- forest_wf |>
     grid = forest_grid,
     metrics = metric_set(rmse)
   )
+```
 
-
+```{r}
 # Find best tuning params
 forest_best_tune <- forest_CV_results |>
   select_best(metric = "rmse")
+```
 
-
+```{r}
 # Finalize workflow
 forest_final <- forest_wf |>
   finalize_workflow(forest_best_tune) |>
   fit(data = bikedata)
+```
 
-
+```{r}
 # Predict the test data
 forest_predictions <- forest_final |>
   predict(new_data = testdata) |>
   mutate(.pred = exp(.pred))
+```
 
-
+```{r}
 # Format & submit to Kaggle
 kaggle_submission <- bind_cols(forest_predictions, testdata) |>
   select(datetime, .pred) |>
@@ -88,3 +106,4 @@ kaggle_submission <- bind_cols(forest_predictions, testdata) |>
          datetime = as.character(format(datetime)))
 
 vroom_write(x=kaggle_submission, file="./RandomForest.csv", delim=",")
+```
