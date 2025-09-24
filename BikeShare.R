@@ -35,56 +35,52 @@ prepped_recipe <- prep(my_recipe)
 bake(prepped_recipe, new_data = bikedata)
 
 
-# Regression Tree
-my_mod <- rand_forest(mtry = tune(),
-                      min_n = tune(),
-                      trees = 500) |>
-  set_engine("ranger") |>
+# BART Model
+bart_mod <- bart(trees = tune()) |>
+  set_engine("dbarts") |>
   set_mode("regression")
 
-forest_wf <- workflow() |>
+bart_wf <- workflow() |>
   add_recipe(my_recipe) |>
-  add_model(my_mod)
+  add_model(bart_mod)
 
 # Create a grid of tuning values
-forest_grid <- grid_regular(mtry(range = c(1, 12)),
-                            min_n(),
-                            levels = 5)
+bart_grid <- expand_grid(trees = c(1, 5, 10, 30, 50, 100, 200))
 
 folds <- vfold_cv(bikedata, v = 5, repeats=1)
 
 
 # Run the Cross Validation
-forest_CV_results <- forest_wf |>
+bart_CV_results <- bart_wf |>
   tune_grid(
     resamples = folds,
-    grid = forest_grid,
+    grid = bart_grid,
     metrics = metric_set(rmse)
   )
 
 
 # Find best tuning params
-forest_best_tune <- forest_CV_results |>
+bart_best_tune <- bart_CV_results |>
   select_best(metric = "rmse")
 
 
 # Finalize workflow
-forest_final <- forest_wf |>
-  finalize_workflow(forest_best_tune) |>
+bart_final <- bart_wf |>
+  finalize_workflow(bart_best_tune) |>
   fit(data = bikedata)
 
 
 # Predict the test data
-forest_predictions <- forest_final |>
+bart_predictions <- bart_final |>
   predict(new_data = testdata) |>
   mutate(.pred = exp(.pred))
 
 
 # Format & submit to Kaggle
-kaggle_submission <- bind_cols(forest_predictions, testdata) |>
+kaggle_submission <- bind_cols(bart_predictions, testdata) |>
   select(datetime, .pred) |>
   rename(count = .pred) |>
   mutate(count = pmax(0, count),
          datetime = as.character(format(datetime)))
 
-vroom_write(x=kaggle_submission, file="./RandomForest.csv", delim=",")
+vroom_write(x=kaggle_submission, file="./BART.csv", delim=",")
