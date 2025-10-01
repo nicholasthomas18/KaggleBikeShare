@@ -5,12 +5,12 @@ library(vroom)
 library(patchwork)
 library(lubridate)
 library(ranger)
+library(agua)
 
 
 # Bring in Data
 bikedata <- vroom("/Users/nicholasthomas/Desktop/STATISTICS/STAT 348/BikeShare/bike-sharing-demand/train.csv")
 testdata <- vroom("/Users/nicholasthomas/Desktop/STATISTICS/STAT 348/BikeShare/bike-sharing-demand/test.csv")
-
 
 # Data Wrangling
 # Dump casual and registered
@@ -26,13 +26,17 @@ bikedata <- bikedata |>
 my_recipe <- recipe(count ~., data = bikedata) |>
   step_mutate(weather = if_else(weather == 4, 3, weather)) |>
   step_mutate(weather = factor(weather)) |>
-  step_time(datetime, features = "hour") |>
   step_mutate(season = factor(season)) |>
   step_corr(all_numeric_predictors(), threshold = 0.5) |>
   step_dummy(all_nominal_predictors()) |>
   step_normalize(all_numeric_predictors())
 prepped_recipe <- prep(my_recipe)
-bake(prepped_recipe, new_data = bikedata)
+bake(prepped_recipe, new_data = testdata)
+testdata_processed <- bake(prepped_recipe, new_data = testdata)
+
+vroom_write(x=testdata_processed, file="./testdata.csv", delim=",")
+
+
 
 
 # BART Model
@@ -47,7 +51,7 @@ bart_wf <- workflow() |>
 # Create a grid of tuning values
 bart_grid <- expand_grid(trees = c(1, 5, 10, 30, 50, 100, 200))
 
-folds <- vfold_cv(bikedata, v = 5, repeats=1)
+folds <- vfold_cv(bikedata, v = 2, repeats=1)
 
 
 # Run the Cross Validation
@@ -75,6 +79,22 @@ bart_predictions <- bart_final |>
   predict(new_data = testdata) |>
   mutate(.pred = exp(.pred))
 
+#DATA ROBOT
+#read in data
+predictions <- vroom("/Users/nicholasthomas/Desktop/STATISTICS/DataRobotPreds.csv")
+
+predictions <- testdata |>
+  select(datetime) |>
+  bind_cols(predictions %>% select(count_PREDICTION)) |>
+  rename(count = count_PREDICTION) |>
+  mutate(
+    count = exp(count),
+    datetime = format(datetime, "%Y-%m-%d %H:%M:%S")
+  )
+
+vroom_write(x=predictions, file="./DataRobot.csv", delim=",")
+
+
 
 # Format & submit to Kaggle
 kaggle_submission <- bind_cols(bart_predictions, testdata) |>
@@ -84,3 +104,7 @@ kaggle_submission <- bind_cols(bart_predictions, testdata) |>
          datetime = as.character(format(datetime)))
 
 vroom_write(x=kaggle_submission, file="./BART.csv", delim=",")
+
+
+
+
